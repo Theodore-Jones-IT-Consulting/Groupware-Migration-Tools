@@ -213,7 +213,7 @@ def organize_drive_contents(takeout_folder):
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
-        print("Usage: python script.py <folder_path>")
+        print("Usage: python takeout_unroll.py <folder_path>")
         sys.exit(1)
     
     folder_path = sys.argv[1]
