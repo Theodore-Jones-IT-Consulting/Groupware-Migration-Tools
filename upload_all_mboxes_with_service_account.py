@@ -19,47 +19,43 @@ limitations under the License.
 
 import os
 import subprocess
-import re
-import concurrent.futures
+import time
 
-def run_gyb_command(user_folder, dest_domain):
-    mbox_folder = os.path.join(user_folder, 'mbox')
-    if os.path.exists(mbox_folder):
-        email = os.path.basename(user_folder)
-        username = email.split('@')[0]
-        dest_email = f"{username}@{dest_domain}"
-        email_without_at = email.replace('@', '')
-        tmux_window_name = f"{email_without_at}_email"
+def create_tmux_session(session_name, command):
+    """
+    Creates a tmux session and runs the specified command in it.
+    """
+    try:
+        # Create a new detached tmux session
+        subprocess.check_call(['tmux', 'new-session', '-d', '-s', session_name])
+        # Allow some time for tmux to set up the new session
+        time.sleep(1)
+        # Send the command to the tmux session, followed by 'Enter' to execute it
+        subprocess.check_call(['tmux', 'send-keys', '-t', session_name, command, 'C-m'])
+        print(f"Session {session_name} created and command sent.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error creating session {session_name}: {e}")
 
-        # Create a new tmux window for the user
-        subprocess.run(['tmux', 'new-window', '-n', tmux_window_name, '-d'])
+def process_user_folders(base_folder, dest_domain):
+    """
+    Processes each user folder, creating a tmux session for each and running the GYB command.
+    """
+    for folder in os.listdir(base_folder):
+        folder_path = os.path.join(base_folder, folder)
+        if os.path.isdir(folder_path) and 'mbox' in os.listdir(folder_path):
+            email_prefix = folder.split('@')[0]
+            session_name = f"gyb_{email_prefix}"
+            dest_email = f"{email_prefix}@{dest_domain}"
+            command = f"gyb --action restore-mbox --email {dest_email} --service-account --local-folder '{folder_path}/mbox'"
+            create_tmux_session(session_name, command)
+        else:
+            print(f"Skipping {folder_path}, does not contain 'mbox' directory.")
 
-        # Run the gyb command in the tmux window
-        gyb_command = [
-            'tmux', 'send-keys', '-t', tmux_window_name,
-            f"gyb --action restore-mbox --email {dest_email} --service-account --local-folder {mbox_folder}",
-            'Enter'
-        ]
-        subprocess.run(gyb_command)
-
-def process_users(folder_path, dest_domain):
-    user_folders = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
-
-    # Configure tmux to keep the output visible even after the process completes
-    subprocess.run(['tmux', 'set-option', '-g', 'remain-on-exit', 'on'])
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(run_gyb_command, user_folder, dest_domain) for user_folder in user_folders]
-        concurrent.futures.wait(futures)
-
-    print("Finished uploading Mbox files for all users.")
-
-if __name__ == '__main__':
-    folder_path = input("Enter the path to the folder containing the unrolled takeout archive: ")
-    if not os.path.isdir(folder_path):
-        print(f"Error: {folder_path} is not a valid directory.")
+if __name__ == "__main__":
+    base_folder = input("Enter the path to the folder containing the email archives: ")
+    if not os.path.isdir(base_folder):
+        print("Error: The specified path does not exist or is not a directory.")
         exit(1)
 
     dest_domain = input("Enter the destination domain name: ")
-
-    process_users(folder_path, dest_domain)
+    process_user_folders(base_folder, dest_domain)
