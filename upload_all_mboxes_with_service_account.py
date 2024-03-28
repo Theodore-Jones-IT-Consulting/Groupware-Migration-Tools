@@ -22,10 +22,12 @@ import subprocess
 import re
 import concurrent.futures
 
-def run_gyb_command(user_folder):
+def run_gyb_command(user_folder, dest_domain):
     mbox_folder = os.path.join(user_folder, 'mbox')
     if os.path.exists(mbox_folder):
         email = os.path.basename(user_folder)
+        username = email.split('@')[0]
+        dest_email = f"{username}@{dest_domain}"
         email_without_at = email.replace('@', '')
         tmux_window_name = f"{email_without_at}_email"
 
@@ -35,19 +37,19 @@ def run_gyb_command(user_folder):
         # Run the gyb command in the tmux window
         gyb_command = [
             'tmux', 'send-keys', '-t', tmux_window_name,
-            f"gyb --action restore-mbox --email {email} --service-account --local-folder {mbox_folder}",
+            f"gyb --action restore-mbox --email {dest_email} --service-account --local-folder {mbox_folder}",
             'Enter'
         ]
         subprocess.run(gyb_command)
 
-def process_users(folder_path):
+def process_users(folder_path, dest_domain):
     user_folders = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
 
     # Configure tmux to keep the output visible even after the process completes
     subprocess.run(['tmux', 'set-option', '-g', 'remain-on-exit', 'on'])
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(run_gyb_command, user_folder) for user_folder in user_folders]
+        futures = [executor.submit(run_gyb_command, user_folder, dest_domain) for user_folder in user_folders]
         concurrent.futures.wait(futures)
 
     print("Finished uploading Mbox files for all users.")
@@ -58,4 +60,6 @@ if __name__ == '__main__':
         print(f"Error: {folder_path} is not a valid directory.")
         exit(1)
 
-    process_users(folder_path)
+    dest_domain = input("Enter the destination domain name: ")
+
+    process_users(folder_path, dest_domain)
